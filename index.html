@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seat Arranger</title>
+<style>
+:root{
+  --bg:#f5f3ee; --panel:#ffffff; --ink:#1f2328; --muted:#6b6f76; --line:#e3ded4;
+  --table:#ece2cf; --table-ink:#5a4a33; --seat:#ffffff; --seat-empty:#faf8f4; --seat-line:#d8d1c3;
+  --accent:#2f6fde; --accent-soft:#dbe7fb; --ok:#2e8b57; --warn:#c2410c; --warn-soft:#fde7d9;
+  --hl:#fde047; --shadow:0 1px 2px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15171b; --panel:#1f2228; --ink:#e7e9ec; --muted:#9aa0a8; --line:#33373f;
+    --table:#3b3327; --table-ink:#eadbc0; --seat:#2a2e35; --seat-empty:#1b1e23; --seat-line:#3d424b;
+    --accent:#6ea0ff; --accent-soft:#24344f; --ok:#4ade80; --warn:#fb923c; --warn-soft:#3b2619;
+    --hl:#a16207; --shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;}
+button,input{font:inherit;color:inherit}
+header{padding:14px 16px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;border-bottom:1px solid var(--line);background:var(--panel)}
+header h1{font-size:18px;margin:0 8px 0 0;font-weight:650}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--panel);padding:6px 11px;border-radius:8px;cursor:pointer;white-space:nowrap}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn:disabled{opacity:.45;cursor:default;border-color:var(--line)}
+.search{border:1px solid var(--line);background:var(--bg);padding:6px 10px;border-radius:8px;width:180px}
+.stats{color:var(--muted);font-size:13px;margin-left:auto}
+.stats b{color:var(--ink);font-weight:600}
+.hint{color:var(--muted);font-size:12.5px;padding:8px 16px 0}
+
+main{display:grid;grid-template-columns:260px 1fr;gap:16px;padding:12px 16px 40px;align-items:start}
+aside{position:sticky;top:12px;max-height:calc(100vh - 24px);display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+aside h2{font-size:14px;margin:0;padding:12px 14px 8px;display:flex;justify-content:space-between;align-items:center}
+aside h2 .count{background:var(--warn-soft);color:var(--warn);border-radius:999px;padding:1px 9px;font-size:12px}
+.waitlist{flex:1;overflow:auto;padding:6px 10px 10px;display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;min-height:120px;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);transition:background .12s}
+.waitlist.over{background:var(--accent-soft)}
+.waitlist .empty{color:var(--muted);font-size:12.5px;padding:18px 6px;text-align:center;width:100%}
+.addguest{display:flex;gap:6px;padding:10px}
+.addguest input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);padding:6px 8px;border-radius:8px}
+
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--seat);border:1px solid var(--seat-line);border-radius:999px;padding:4px 6px 4px 10px;cursor:grab;user-select:none;touch-action:none;max-width:100%}
+.chip .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip .tag{font-size:11px;color:var(--muted);background:var(--bg);border-radius:999px;padding:0 6px}
+.chip .x{border:0;background:none;color:var(--muted);cursor:pointer;padding:0 3px;line-height:1;font-size:15px}
+.chip .x:hover{color:var(--warn)}
+.chip.over{outline:2px solid var(--accent);outline-offset:1px}
+
+.tables{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);display:flex;justify-content:center;padding:10px;position:relative;break-inside:avoid}
+.card .del{position:absolute;top:8px;right:8px;border:0;background:none;color:var(--muted);cursor:pointer;font-size:12px;opacity:0;transition:opacity .15s}
+.card:hover .del{opacity:1}
+.card .del:hover{color:var(--warn)}
+.ring{position:relative;width:280px;height:280px}
+.tcenter{position:absolute;left:78px;top:78px;width:124px;height:124px;border-radius:50%;background:var(--table);color:var(--table-ink);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;cursor:default;user-select:none;transition:box-shadow .12s}
+.tcenter .lbl{font-weight:700;font-size:17px;padding:0 10px;word-break:break-word}
+.tcenter .cnt{font-size:12px;opacity:.8}
+.tcenter .cnt.full{color:var(--ok);opacity:1;font-weight:600}
+.tcenter.over{box-shadow:0 0 0 3px var(--accent)}
+.seat{position:absolute;width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;text-align:center;padding:5px;font-size:11px;line-height:1.15;user-select:none;transition:transform .12s,box-shadow .12s,background .12s}
+.seat.empty{background:var(--seat-empty);border:1.5px dashed var(--seat-line);color:var(--muted);font-size:10px}
+.seat.filled{background:var(--seat);border:1.5px solid var(--seat-line);cursor:grab;touch-action:none;box-shadow:var(--shadow)}
+.seat .nm{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.seat.over{transform:scale(1.12);box-shadow:0 0 0 3px var(--accent)}
+.seat.empty.over{background:var(--accent-soft);border-color:var(--accent)}
+
+.dragging{opacity:.3}
+.selected{box-shadow:0 0 0 3px var(--accent)!important}
+body.searching [data-pid]:not(.match){opacity:.3}
+.match{background:var(--hl)!important}
+.pulse{animation:pulse .6s ease}
+@keyframes pulse{0%{transform:scale(1.18)}100%{transform:scale(1)}}
+.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.ghost{position:fixed;z-index:1000;pointer-events:none;background:var(--accent);color:#fff;padding:5px 12px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.25);transform:translate(-50%,-120%);white-space:nowrap;font-weight:600}
+body.is-dragging,body.is-dragging *{cursor:grabbing!important}
+
+.welcome{grid-column:1/-1;border:2px dashed var(--line);border-radius:14px;padding:50px 20px;text-align:center;color:var(--muted);background:var(--panel)}
+.welcome h2{color:var(--ink);margin:0 0 8px}
+.welcome pre{display:inline-block;text-align:left;background:var(--bg);padding:8px 14px;border-radius:8px;color:var(--ink)}
+body.filedrag .welcome,body.filedrag .tables{outline:3px dashed var(--accent);outline-offset:4px}
+
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:8px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:1001}
+.toast.show{opacity:1}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);width:min(560px,calc(100vw - 32px))}
+dialog textarea{width:100%;height:260px;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px;font:13px/1.4 ui-monospace,Consolas,monospace;color:var(--ink)}
+dialog .row{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+input[type=file]{display:none}
+
+@media (max-width:760px){
+  main{grid-template-columns:1fr}
+  aside{top:0;z-index:5;max-height:38vh}
+  .stats{margin-left:0;width:100%}
+  .search{width:100%}
+}
+@media print{
+  header .toolbar,.hint,aside,.card .del{display:none!important}
+  main{display:block;padding:0}
+  body{background:#fff}
+  .tables{grid-template-columns:repeat(3,1fr)}
+  .card{box-shadow:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Seat Arranger</h1>
+  <div class="toolbar">
+    <label class="btn primary" for="file">Upload list</label>
+    <input type="file" id="file" accept=".txt,.tsv,.csv,text/plain,text/csv">
+    <button class="btn" id="pasteBtn">Paste</button>
+    <button class="btn" id="exportBtn">Export</button>
+    <button class="btn" id="printBtn">Print</button>
+    <button class="btn" id="undoBtn" title="Ctrl+Z">Undo</button>
+    <button class="btn" id="addTableBtn">+ Table</button>
+    <button class="btn" id="clearBtn">Clear</button>
+    <input class="search" id="search" type="search" placeholder="Find a guest…">
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+<div class="hint">Drag a guest onto an empty seat to move them, onto another guest to swap, onto a table's centre to take its next free seat, or into the waiting area to unseat them. You can also click one guest, then click where they should go. Double-click a name or a table to rename it.</div>
+<main>
+  <aside>
+    <h2>Waiting area <span class="count" id="waitCount">0</span></h2>
+    <div class="waitlist" id="waitlist" data-kind="waitarea"></div>
+    <form class="addguest" id="addGuest">
+      <input id="newGuest" placeholder="Add guest…" autocomplete="off">
+      <button class="btn" type="submit">Add</button>
+    </form>
+  </aside>
+  <section class="tables" id="tables"></section>
+</main>
+
+<dialog id="pasteDlg">
+  <form method="dialog">
+    <h3 style="margin-top:0">Paste seating list</h3>
+    <p style="color:var(--muted);margin-top:0">One guest per line: <code>table&lt;TAB&gt;name</code>. Lines without a table go to the waiting area.</p>
+    <textarea id="pasteText"></textarea>
+    <div class="row">
+      <button class="btn" value="cancel">Cancel</button>
+      <button class="btn primary" value="ok" id="pasteOk">Import</button>
+    </div>
+  </form>
+</dialog>
+<div class="toast" id="toast"></div>
+
+<script>
+const SEATS = 10;
+const KEY = 'seat-arranger-v1';
+let state = { tables: [], waiting: [], people: {} };
+const history = [];
+let selected = null;
+let query = '';
+
+const $ = id => document.getElementById(id);
+const uid = () => 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const tid = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+/* ---------- persistence & history ---------- */
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+function load(){
+  try { const s = localStorage.getItem(KEY); if (s) { const v = JSON.parse(s); if (v && v.tables) state = v; } } catch(e){}
+}
+function snapshot(){ history.push(JSON.stringify(state)); if (history.length > 200) history.shift(); }
+function undo(){
+  if (!history.length) return;
+  state = JSON.parse(history.pop()); selected = null; save(); render(); toast('Undone');
+}
+
+/* ---------- parsing ---------- */
+function splitCSV(line){
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++){
+    const c = line[i];
+    if (q){ if (c === '"' && line[i+1] === '"'){ cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur); return out.map(s => s.trim());
+}
+function parse(text){
+  const rows = [];
+  for (const raw of text.replace(/^﻿/, '').split(/\r?\n/)){
+    if (!raw.trim()) continue;
+    let cols;
+    if (raw.includes('\t')) cols = raw.split('\t').map(s => s.trim());
+    else if (raw.includes(',')) cols = splitCSV(raw);
+    else { const m = raw.match(/^\s*(\d+)\s+(.+)$/); cols = m ? [m[1], m[2].trim()] : ['', raw.trim()]; }
+    const label = cols[0] || '', name = (cols[1] || '').trim();
+    const seat = cols[2] && /^\d+$/.test(cols[2]) ? +cols[2] : null;
+    if (!name) continue;
+    rows.push({ label, name, seat });
+  }
+  if (rows.length && /table|桌/i.test(rows[0].label) && /name|姓名|guest/i.test(rows[0].name)) rows.shift();
+
+  const order = [], byLabel = {};
+  for (const r of rows) if (r.label && !(r.label in byLabel)) { byLabel[r.label] = []; order.push(r.label); }
+  if (order.every(l => /^\d+$/.test(l))) order.sort((a, b) => a - b);
+
+  const s = { tables: [], waiting: [], people: {} };
+  const tmap = {};
+  for (const l of order){ const t = { id: tid(), label: l, seats: Array(SEATS).fill(null) }; s.tables.push(t); tmap[l] = t; }
+  const later = [];
+  for (const r of rows){
+    const id = uid(); s.people[id] = { name: r.name };
+    if (!r.label) { s.waiting.push(id); continue; }
+    const t = tmap[r.label];
+    if (r.seat && r.seat <= SEATS && !t.seats[r.seat - 1]) t.seats[r.seat - 1] = id;
+    else later.push([t, id]);
+  }
+  let overflow = 0;
+  for (const [t, id] of later){
+    const i = t.seats.indexOf(null);
+    if (i >= 0) t.seats[i] = id;
+    else { s.people[id].orig = t.label; s.waiting.push(id); overflow++; }
+  }
+  return { s, count: rows.length, overflow };
+}
+function importText(text){
+  const { s, count, overflow } = parse(text);
+  if (!count) { toast('No guests found in that file'); return; }
+  if (state.tables.length || state.waiting.length) snapshot();
+  state = s; selected = null; save(); render();
+  toast(`Imported ${count} guests into ${s.tables.length} tables` + (overflow ? ` — ${overflow} over capacity moved to waiting` : ''), 4000);
+}
+
+/* ---------- export ---------- */
+function exportText(){
+  const lines = [];
+  for (const t of state.tables) t.seats.forEach((p, i) => { if (p) lines.push(`${t.label}\t${state.people[p].name}\t${i + 1}`); });
+  for (const p of state.waiting) lines.push(`\t${state.people[p].name}`);
+  return lines.join('\r\n') + '\r\n';
+}
+function download(){
+  if (!Object.keys(state.people).length) { toast('Nothing to export'); return; }
+  const blob = new Blob(['﻿' + exportText()], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'seat arrangement.txt';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ---------- locating & moving ---------- */
+function find(pid){
+  for (let t = 0; t < state.tables.length; t++){
+    const s = state.tables[t].seats.indexOf(pid);
+    if (s >= 0) return { type: 'seat', t, s };
+  }
+  const i = state.waiting.indexOf(pid);
+  return i >= 0 ? { type: 'wait', i } : null;
+}
+function targetFromEl(el){
+  if (!el) return null;
+  const k = el.dataset.kind;
+  if (k === 'seat') return { type: 'seat', t: +el.dataset.t, s: +el.dataset.s };
+  if (k === 'table') return { type: 'table', t: +el.dataset.t };
+  if (k === 'wait') return { type: 'chip', pid: el.dataset.pid };
+  if (k === 'waitarea') return { type: 'waitArea' };
+  return null;
+}
+function doMove(pid, tg){
+  const from = find(pid); if (!from || !tg) return;
+  if (tg.type === 'table'){
+    if (from.type === 'seat' && from.t === tg.t) return;
+    const s = state.tables[tg.t].seats.indexOf(null);
+    if (s < 0){ shake(`[data-kind="table"][data-t="${tg.t}"]`); toast(`${state.tables[tg.t].label}: table is full`); return; }
+    tg = { type: 'seat', t: tg.t, s };
+  }
+  if (tg.type === 'seat'){
+    if (from.type === 'seat' && from.t === tg.t && from.s === tg.s) return;
+    snapshot();
+    const occ = state.tables[tg.t].seats[tg.s];
+    state.tables[tg.t].seats[tg.s] = pid;
+    if (from.type === 'seat') state.tables[from.t].seats[from.s] = occ;
+    else if (occ) { state.waiting[from.i] = occ; state.people[occ].orig = state.tables[tg.t].label; }
+    else state.waiting.splice(from.i, 1);
+    delete state.people[pid].orig;
+  } else if (tg.type === 'waitArea'){
+    if (from.type === 'wait' && from.i === state.waiting.length - 1) return;
+    snapshot();
+    if (from.type === 'seat'){ state.people[pid].orig = state.tables[from.t].label; state.tables[from.t].seats[from.s] = null; }
+    else state.waiting.splice(from.i, 1);
+    state.waiting.push(pid);
+  } else if (tg.type === 'chip'){
+    if (tg.pid === pid) return;
+    snapshot();
+    if (from.type === 'seat'){
+      const j = state.waiting.indexOf(tg.pid);
+      state.people[pid].orig = state.tables[from.t].label;
+      delete state.people[tg.pid].orig;
+      state.tables[from.t].seats[from.s] = tg.pid;
+      state.waiting[j] = pid;
+    } else {
+      state.waiting.splice(from.i, 1);
+      state.waiting.splice(state.waiting.indexOf(tg.pid), 0, pid);
+    }
+  }
+  save(); render(); pulse(pid);
+}
+
+/* ---------- rendering ---------- */
+function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function matches(pid){ return query && state.people[pid].name.toLowerCase().includes(query); }
+
+function render(){
+  const tablesEl = $('tables'); tablesEl.innerHTML = '';
+  const wl = $('waitlist'); wl.innerHTML = '';
+  const total = Object.keys(state.people).length;
+
+  if (!state.tables.length && !total){
+    const w = el('div', 'welcome');
+    w.innerHTML = `<h2>Upload a seating list to begin</h2>
+      <p>Click <b>Upload list</b>, drop a file anywhere on this page, or use <b>Paste</b>.<br>Each line is a table number and a guest name, separated by a tab:</p>
+      <pre>1\t戴美瑾 Anita\n1\t戴俊杰\n2\tHaoqing Lin</pre>
+      <p>Each round table seats ${SEATS}. Anyone over capacity goes to the waiting area.</p>`;
+    tablesEl.appendChild(w);
+  }
+
+  state.tables.forEach((t, ti) => {
+    const card = el('div', 'card');
+    const del = el('button', 'del', 'Remove'); del.title = 'Remove table (guests go to waiting area)';
+    del.onclick = e => { e.stopPropagation(); removeTable(ti); };
+    card.appendChild(del);
+    const ring = el('div', 'ring');
+    const used = t.seats.filter(Boolean).length;
+    const c = el('div', 'tcenter'); c.dataset.kind = 'table'; c.dataset.t = ti; c.title = 'Drop here to take the next free seat · double-click to rename';
+    c.appendChild(el('div', 'lbl', /^\d+$/.test(t.label) ? 'Table ' + t.label : t.label));
+    c.appendChild(el('div', 'cnt' + (used === SEATS ? ' full' : ''), `${used} / ${SEATS}`));
+    ring.appendChild(c);
+    for (let s = 0; s < SEATS; s++){
+      const a = (-90 + s * 360 / SEATS) * Math.PI / 180;
+      const seat = el('div', 'seat');
+      seat.style.left = (140 + 108 * Math.cos(a) - 31) + 'px';
+      seat.style.top  = (140 + 108 * Math.sin(a) - 31) + 'px';
+      seat.dataset.kind = 'seat'; seat.dataset.t = ti; seat.dataset.s = s;
+      const pid = t.seats[s];
+      if (pid){
+        seat.classList.add('filled'); seat.dataset.pid = pid;
+        seat.title = `${state.people[pid].name} — seat ${s + 1}`;
+        seat.appendChild(el('span', 'nm', state.people[pid].name));
+        if (matches(pid)) seat.classList.add('match');
+        if (selected === pid) seat.classList.add('selected');
+      } else {
+        seat.classList.add('empty'); seat.textContent = s + 1;
+      }
+      ring.appendChild(seat);
+    }
+    card.appendChild(ring);
+    tablesEl.appendChild(card);
+  });
+
+  if (!state.waiting.length) wl.appendChild(el('div', 'empty', total ? 'Everyone has a seat. Drag a guest here to unseat them.' : 'No guests yet.'));
+  for (const pid of state.waiting){
+    const p = state.people[pid];
+    const chip = el('div', 'chip'); chip.dataset.kind = 'wait'; chip.dataset.pid = pid; chip.title = p.name;
+    chip.appendChild(el('span', 'nm', p.name));
+    if (p.orig) chip.appendChild(el('span', 'tag', (/^\d+$/.test(p.orig) ? 'T' : '') + p.orig));
+    const x = el('button', 'x', '×'); x.title = 'Remove guest'; x.type = 'button';
+    x.onclick = e => { e.stopPropagation(); removeGuest(pid); };
+    chip.appendChild(x);
+    if (matches(pid)) chip.classList.add('match');
+    if (selected === pid) chip.classList.add('selected');
+    wl.appendChild(chip);
+  }
+
+  const seated = total - state.waiting.length;
+  $('waitCount').textContent = state.waiting.length;
+  $('stats').innerHTML = `<b>${total}</b> guests · <b>${seated}</b> seated · <b>${state.waiting.length}</b> waiting · <b>${state.tables.length}</b> tables (${state.tables.length * SEATS} seats)`;
+  $('undoBtn').disabled = !history.length;
+  document.body.classList.toggle('searching', !!query);
+}
+
+/* ---------- table / guest edits ---------- */
+function addTable(){
+  snapshot();
+  const nums = state.tables.map(t => +t.label).filter(n => !isNaN(n));
+  const label = String(nums.length ? Math.max(...nums) + 1 : state.tables.length + 1);
+  state.tables.push({ id: tid(), label, seats: Array(SEATS).fill(null) });
+  save(); render();
+  $('tables').lastElementChild.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+function removeTable(ti){
+  const t = state.tables[ti], n = t.seats.filter(Boolean).length;
+  if (n && !confirm(`Remove ${/^\d+$/.test(t.label) ? 'Table ' + t.label : t.label}? Its ${n} guest(s) will move to the waiting area.`)) return;
+  snapshot();
+  for (const p of t.seats) if (p) { state.people[p].orig = t.label; state.waiting.push(p); }
+  state.tables.splice(ti, 1);
+  save(); render();
+}
+function removeGuest(pid){
+  if (!confirm(`Remove ${state.people[pid].name} from the guest list?`)) return;
+  snapshot();
+  state.waiting.splice(state.waiting.indexOf(pid), 1);
+  delete state.people[pid];
+  if (selected === pid) selected = null;
+  save(); render();
+}
+function renameGuest(pid){
+  const v = prompt('Guest name', state.people[pid].name);
+  if (v == null || !v.trim() || v.trim() === state.people[pid].name) return;
+  snapshot(); state.people[pid].name = v.trim(); save(); render();
+}
+function renameTable(ti){
+  const t = state.tables[ti];
+  const v = prompt('Table name', t.label);
+  if (v == null || !v.trim() || v.trim() === t.label) return;
+  snapshot(); t.label = v.trim(); save(); render();
+}
+
+/* ---------- feedback ---------- */
+let toastTimer;
+function toast(msg, ms = 2200){ const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms); }
+function pulse(pid){ const e = document.querySelector(`[data-pid="${pid}"]`); if (e){ e.classList.add('pulse'); setTimeout(() => e.classList.remove('pulse'), 600); } }
+function shake(sel){ const e = document.querySelector(sel); if (e){ e.classList.remove('shake'); void e.offsetWidth; e.classList.add('shake'); } }
+
+/* ---------- drag & drop (pointer events: mouse, pen, touch) ---------- */
+let drag = null, suppressClick = false;
+function dropTargetAt(x, y){
+  const e = document.elementFromPoint(x, y);
+  return e ? e.closest('[data-kind]') : null;
+}
+function setOver(t){
+  if (drag.over === t) return;
+  if (drag.over) drag.over.classList.remove('over');
+  drag.over = t;
+  if (t && !(t.dataset.pid === drag.pid)) t.classList.add('over');
+}
+document.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('button')) return;
+  const src = e.target.closest('[data-pid]');
+  if (!src) return;
+  drag = { pid: src.dataset.pid, src, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, started: false, over: null };
+});
+document.addEventListener('pointermove', e => {
+  if (!drag) return;
+  drag.x = e.clientX; drag.y = e.clientY;
+  if (!drag.started){
+    if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+    drag.started = true;
+    drag.ghost = el('div', 'ghost', state.people[drag.pid].name);
+    document.body.appendChild(drag.ghost);
+    drag.src.classList.add('dragging');
+    document.body.classList.add('is-dragging');
+    requestAnimationFrame(autoScroll);
+  }
+  e.preventDefault();
+  drag.ghost.style.left = e.clientX + 'px'; drag.ghost.style.top = e.clientY + 'px';
+  setOver(dropTargetAt(e.clientX, e.clientY));
+}, { passive: false });
+function endDrag(e, cancel){
+  if (!drag) return;
+  if (drag.started){
+    const tg = cancel ? null : targetFromEl(dropTargetAt(e.clientX, e.clientY));
+    drag.ghost.remove(); drag.src.classList.remove('dragging');
+    if (drag.over) drag.over.classList.remove('over');
+    document.body.classList.remove('is-dragging');
+    const pid = drag.pid; drag = null;
+    suppressClick = true; setTimeout(() => suppressClick = false, 0);
+    selected = null;
+    if (tg) doMove(pid, tg); else render();
+  } else drag = null;
+}
+document.addEventListener('pointerup', e => endDrag(e, false));
+document.addEventListener('pointercancel', e => endDrag(e, true));
+function autoScroll(){
+  if (!drag || !drag.started) return;
+  const edge = 70, y = drag.y;
+  let dy = 0;
+  if (y < edge) dy = -(edge - y) / 3; else if (y > innerHeight - edge) dy = (y - (innerHeight - edge)) / 3;
+  const wl = $('waitlist'), r = wl.getBoundingClientRect();
+  if (drag.x >= r.left && drag.x <= r.right && wl.scrollHeight > wl.clientHeight){
+    if (y < r.top + 30 && y > r.top - 10) wl.scrollTop -= 8;
+    else if (y > r.bottom - 30 && y < r.bottom + 10) wl.scrollTop += 8;
+  }
+  if (dy){ window.scrollBy(0, dy); setOver(dropTargetAt(drag.x, drag.y)); }
+  requestAnimationFrame(autoScroll);
+}
+
+/* ---------- click-to-move ---------- */
+document.addEventListener('click', e => {
+  if (suppressClick || e.target.closest('button,input,label,form,dialog,header')) return;
+  const t = e.target.closest('[data-kind]');
+  if (selected){
+    const pid = selected; selected = null;
+    if (t && t.dataset.pid === pid) { render(); return; }
+    if (t) doMove(pid, targetFromEl(t)); else render();
+  } else if (t && t.dataset.pid){
+    selected = t.dataset.pid; render();
+  }
+});
+document.addEventListener('dblclick', e => {
+  const p = e.target.closest('[data-pid]');
+  if (p) { selected = null; renameGuest(p.dataset.pid); return; }
+  const c = e.target.closest('[data-kind="table"]');
+  if (c) renameTable(+c.dataset.t);
+});
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.target.closest('input,textarea')) { e.preventDefault(); undo(); }
+  if (e.key === 'Escape' && selected) { selected = null; render(); }
+});
+
+/* ---------- file input / drop / paste ---------- */
+function readFile(f){
+  const r = new FileReader();
+  r.onload = () => importText(r.result);
+  r.readAsText(f, 'utf-8');
+}
+$('file').addEventListener('change', e => { if (e.target.files[0]) readFile(e.target.files[0]); e.target.value = ''; });
+document.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); document.body.classList.add('filedrag'); } });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('filedrag'); });
+document.addEventListener('drop', e => {
+  document.body.classList.remove('filedrag');
+  if (e.dataTransfer.files[0]) { e.preventDefault(); readFile(e.dataTransfer.files[0]); }
+});
+$('pasteBtn').onclick = () => { $('pasteText').value = ''; $('pasteDlg').showModal(); };
+$('pasteDlg').addEventListener('close', () => { if ($('pasteDlg').returnValue === 'ok' && $('pasteText').value.trim()) importText($('pasteText').value); });
+
+/* ---------- toolbar ---------- */
+$('exportBtn').onclick = download;
+$('printBtn').onclick = () => window.print();
+$('undoBtn').onclick = undo;
+$('addTableBtn').onclick = addTable;
+$('clearBtn').onclick = () => {
+  if (!state.tables.length && !state.waiting.length) return;
+  if (!confirm('Clear all tables and guests? (You can undo this.)')) return;
+  snapshot(); state = { tables: [], waiting: [], people: {} }; selected = null; save(); render();
+};
+$('search').addEventListener('input', e => { query = e.target.value.trim().toLowerCase(); render(); });
+$('search').addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ const m = document.querySelector('.match'); if (m) { m.scrollIntoView({ behavior: 'smooth', block: 'center' }); pulse(m.dataset.pid); } }
+});
+$('addGuest').addEventListener('submit', e => {
+  e.preventDefault();
+  const v = $('newGuest').value.trim(); if (!v) return;
+  snapshot(); const id = uid(); state.people[id] = { name: v }; state.waiting.push(id);
+  $('newGuest').value = ''; save(); render(); pulse(id);
+});
+
+load();
+render();
+</script>
+</body>
+</html>
