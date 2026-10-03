@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Seat Arranger</title>
+<script>
+try { const t = localStorage.getItem('seat-arranger-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch(e){}
+</script>
 <style>
 :root{
   --bg:#f5f3ee; --panel:#ffffff; --ink:#1f2328; --muted:#6b6f76; --line:#e3ded4;
@@ -19,6 +22,14 @@
     --hl:#a16207; --shadow:0 1px 2px rgba(0,0,0,.4);
   }
 }
+:root[data-theme="dark"]{
+  --bg:#15171b; --panel:#1f2228; --ink:#e7e9ec; --muted:#9aa0a8; --line:#33373f;
+  --table:#3b3327; --table-ink:#eadbc0; --seat:#2a2e35; --seat-empty:#1b1e23; --seat-line:#3d424b;
+  --accent:#6ea0ff; --accent-soft:#24344f; --ok:#4ade80; --warn:#fb923c; --warn-soft:#3b2619;
+  --hl:#a16207; --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+:root[data-theme="light"]{color-scheme:light}
+:root[data-theme="dark"]{color-scheme:dark}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,"Segoe UI","Microsoft YaHei","PingFang SC",sans-serif;}
@@ -29,6 +40,11 @@ header h1{font-size:18px;margin:0 8px 0 0;font-weight:650}
 .btn{border:1px solid var(--line);background:var(--panel);padding:6px 11px;border-radius:8px;cursor:pointer;white-space:nowrap}
 .btn:hover{border-color:var(--accent)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.icon{padding:6px;display:inline-flex;align-items:center;justify-content:center}
+.btn.icon svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#themeBtn .sun{display:none}
+#themeBtn.is-dark .sun{display:block}
+#themeBtn.is-dark .moon{display:none}
 .btn:disabled{opacity:.45;cursor:default;border-color:var(--line)}
 .search{border:1px solid var(--line);background:var(--bg);padding:6px 10px;border-radius:8px;width:180px}
 .stats{color:var(--muted);font-size:13px;margin-left:auto}
@@ -97,6 +113,8 @@ input[type=file]{display:none}
   main{grid-template-columns:1fr}
   aside{top:0;z-index:5;max-height:38vh}
   .stats{margin-left:0;width:100%}
+  header{position:relative}
+  #themeBtn{position:absolute;top:10px;right:16px}
   .search{width:100%}
 }
 @media print{
@@ -123,8 +141,12 @@ input[type=file]{display:none}
     <input class="search" id="search" type="search" placeholder="Find a guest…">
   </div>
   <div class="stats" id="stats"></div>
+  <button class="btn icon" id="themeBtn">
+    <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3M4.6 4.6l2.1 2.1M17.3 17.3l2.1 2.1M4.6 19.4l2.1-2.1M17.3 6.7l2.1-2.1"/></svg>
+    <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"/></svg>
+  </button>
 </header>
-<div class="hint">Drag a guest onto an empty seat to move them, onto another guest to swap, onto a table's centre to take its next free seat, or into the waiting area to unseat them. You can also click one guest, then click where they should go. Double-click a name or a table to rename it.</div>
+<div class="hint">Drag a guest onto an empty seat to move them, onto another guest to swap, onto a table's centre to take its next free seat, or into the waiting area to unseat them. You can also click one guest, then click where they should go. Right-click (or double-click) a name to rename it; double-click a table to rename it.</div>
 <main>
   <aside>
     <h2>Waiting area <span class="count" id="waitCount">0</span></h2>
@@ -140,7 +162,7 @@ input[type=file]{display:none}
 <dialog id="pasteDlg">
   <form method="dialog">
     <h3 style="margin-top:0">Paste seating list</h3>
-    <p style="color:var(--muted);margin-top:0">One guest per line: <code>table&lt;TAB&gt;name</code>. Lines without a table go to the waiting area.</p>
+    <p style="color:var(--muted);margin-top:0">A <code>Table&lt;TAB&gt;Name</code> header, then one guest per line: <code>table&lt;TAB&gt;name</code>. Leave the table blank for guests who go to the waiting area.</p>
     <textarea id="pasteText"></textarea>
     <div class="row">
       <button class="btn" value="cancel">Cancel</button>
@@ -233,14 +255,14 @@ function importText(text){
 
 /* ---------- export ---------- */
 function exportText(){
-  const lines = [];
-  for (const t of state.tables) t.seats.forEach((p, i) => { if (p) lines.push(`${t.label}\t${state.people[p].name}\t${i + 1}`); });
+  const lines = ['Table\tName'];
+  for (const t of state.tables) for (const p of t.seats) if (p) lines.push(`${t.label}\t${state.people[p].name}`);
   for (const p of state.waiting) lines.push(`\t${state.people[p].name}`);
   return lines.join('\r\n') + '\r\n';
 }
 function download(){
   if (!Object.keys(state.people).length) { toast('Nothing to export'); return; }
-  const blob = new Blob(['﻿' + exportText()], { type: 'text/plain;charset=utf-8' });
+  const blob = new Blob([exportText()], { type: 'text/plain;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'seat arrangement.txt';
   document.body.appendChild(a); a.click(); a.remove();
@@ -318,8 +340,8 @@ function render(){
     const w = el('div', 'welcome');
     w.innerHTML = `<h2>Upload a seating list to begin</h2>
       <p>Click <b>Upload list</b>, drop a file anywhere on this page, or use <b>Paste</b>.<br>Each line is a table number and a guest name, separated by a tab:</p>
-      <pre>1\t戴美瑾 Anita\n1\t戴俊杰\n2\tHaoqing Lin</pre>
-      <p>Each round table seats ${SEATS}. Anyone over capacity goes to the waiting area.</p>`;
+      <pre>Table\tName\n1\t戴美瑾 Anita\n2\tHaoqing Lin\n\tJingshao Zhang</pre>
+      <p>Leave the table blank for guests who don't have a seat yet.<br>Each round table seats ${SEATS}. Anyone over capacity goes to the waiting area.</p>`;
     tablesEl.appendChild(w);
   }
 
@@ -501,6 +523,13 @@ document.addEventListener('dblclick', e => {
   const c = e.target.closest('[data-kind="table"]');
   if (c) renameTable(+c.dataset.t);
 });
+document.addEventListener('contextmenu', e => {
+  const p = e.target.closest('[data-pid]');
+  if (!p) return;
+  e.preventDefault();
+  selected = null;
+  renameGuest(p.dataset.pid);
+});
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.target.closest('input,textarea')) { e.preventDefault(); undo(); }
   if (e.key === 'Escape' && selected) { selected = null; render(); }
@@ -532,6 +561,22 @@ $('clearBtn').onclick = () => {
   if (!confirm('Clear all tables and guests? (You can undo this.)')) return;
   snapshot(); state = { tables: [], waiting: [], people: {} }; selected = null; save(); render();
 };
+const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+function currentTheme(){ return document.documentElement.dataset.theme || (darkQuery.matches ? 'dark' : 'light'); }
+function updateThemeBtn(){
+  const dark = currentTheme() === 'dark';
+  $('themeBtn').classList.toggle('is-dark', dark);
+  $('themeBtn').title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+  $('themeBtn').setAttribute('aria-label', $('themeBtn').title);
+}
+$('themeBtn').onclick = () => {
+  const t = currentTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('seat-arranger-theme', t); } catch(e){}
+  updateThemeBtn();
+};
+darkQuery.addEventListener('change', updateThemeBtn);
+updateThemeBtn();
 $('search').addEventListener('input', e => { query = e.target.value.trim().toLowerCase(); render(); });
 $('search').addEventListener('keydown', e => {
   if (e.key === 'Enter'){ const m = document.querySelector('.match'); if (m) { m.scrollIntoView({ behavior: 'smooth', block: 'center' }); pulse(m.dataset.pid); } }
