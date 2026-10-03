@@ -301,13 +301,13 @@ function doMove(pid, tg){
     const occ = state.tables[tg.t].seats[tg.s];
     state.tables[tg.t].seats[tg.s] = pid;
     if (from.type === 'seat') state.tables[from.t].seats[from.s] = occ;
-    else if (occ) { state.waiting[from.i] = occ; state.people[occ].orig = state.tables[tg.t].label; }
+    else if (occ) { state.waiting[from.i] = occ; delete state.people[occ].orig; }
     else state.waiting.splice(from.i, 1);
     delete state.people[pid].orig;
   } else if (tg.type === 'waitArea'){
     if (from.type === 'wait' && from.i === state.waiting.length - 1) return;
     snapshot();
-    if (from.type === 'seat'){ state.people[pid].orig = state.tables[from.t].label; state.tables[from.t].seats[from.s] = null; }
+    if (from.type === 'seat'){ delete state.people[pid].orig; state.tables[from.t].seats[from.s] = null; }
     else state.waiting.splice(from.i, 1);
     state.waiting.push(pid);
   } else if (tg.type === 'chip'){
@@ -315,7 +315,7 @@ function doMove(pid, tg){
     snapshot();
     if (from.type === 'seat'){
       const j = state.waiting.indexOf(tg.pid);
-      state.people[pid].orig = state.tables[from.t].label;
+      delete state.people[pid].orig;
       delete state.people[tg.pid].orig;
       state.tables[from.t].seats[from.s] = tg.pid;
       state.waiting[j] = pid;
@@ -412,7 +412,7 @@ function removeTable(ti){
   const t = state.tables[ti], n = t.seats.filter(Boolean).length;
   if (n && !confirm(`Remove ${/^\d+$/.test(t.label) ? 'Table ' + t.label : t.label}? Its ${n} guest(s) will move to the waiting area.`)) return;
   snapshot();
-  for (const p of t.seats) if (p) { state.people[p].orig = t.label; state.waiting.push(p); }
+  for (const p of t.seats) if (p) { delete state.people[p].orig; state.waiting.push(p); }
   state.tables.splice(ti, 1);
   save(); render();
 }
